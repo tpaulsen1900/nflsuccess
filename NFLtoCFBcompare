@@ -1,0 +1,165 @@
+import numpy as ny
+import pandas as pd
+import matplotlib.pyplot as mp
+import xlrd
+import xlwt
+from os import write
+import sklearn
+import scipy
+from sklearn.tree import DecisionTreeClassifier # Import Decision Tree Classifier
+from sklearn.model_selection import train_test_split # Import train_test_split function
+from sklearn import metrics
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
+import csv
+from six import StringIO
+from IPython.display import Image
+from sklearn.tree import export_graphviz
+import pydotplus
+
+file = 'NFLCFBQbs.xlsx'
+col_names = ['Player', 'G','Att','Cmp','CmpP','Yds','Y/A','AY/A','TD','Int','Rate']
+xls = pd.read_excel(file,sheet_name='TotalQb')
+xlcfb = pd.read_excel(file,sheet_name='Sheet28')
+xlnflcfb = pd.read_excel(file,sheet_name='Sheet29')
+xlsdata = xlnflcfb.head()
+
+xls.fillna(0, inplace = True)
+xlcfb.fillna(0, inplace=True)
+my_players= xlsdata.groupby(['Player'])
+tablegames = pd.pivot_table(xls, values=['GS'], index=['Player'], aggfunc=ny.sum)
+tablerecord = pd.pivot_table(xls, values=['Wins', 'Loses', 'Ties'], index=['Player'], aggfunc=ny.sum)
+tableyards2 = pd.pivot_table(xls,values=['Yds','TD','Int'], index=['Player'], aggfunc=ny.sum)
+tableyards = pd.pivot_table(xls,values=['Yds'],index=['Player'], aggfunc=ny.sum)
+
+xls.loc[(xls.GS <= 16), 'ydsper16'] = (xls.Yds/xls.GS) * 16
+xls.loc[(xls.GS == 0), 'ydsper16'] = xls.Yds
+xls.loc[(xls.GS <= 15), 'tdper16'] = (xls.TD/xls.GS) * 16
+xls.loc[((xls.GS ==16) | (xls.GS == 0)), 'tdper16'] = xls.TD
+xls.loc[(xls.GS <= 15), 'intper16'] = (xls.Int/xls.GS) * 16
+xls.loc[((xls.GS == 16)), 'intper16'] = (xls.Int)
+xls.loc[((xls.tdper16 >=0)&(xls.intper16 >=1)), 'tdratio'] = (xls.tdper16/xls.intper16)
+xls.loc[(xls.tdper16 >= 0) & (xls.intper16 == 0) & (xls.GS >=1), 'tdratio'] = xls.tdper16
+xls.loc[(xls.tdper16 >= 0) & (xls.intper16 == 0) & (xls.GS == 0), 'tdratio'] = xls.tdper16
+
+xls.loc[(xls.ydsper16 >= 4200), 'yds_match'] = 'Above'
+xls.loc[(xls.ydsper16 >=3300) & (xls.ydsper16 <=4199),'yds_match'] = 'Average'
+xls.loc[(xls.ydsper16 <= 3299), 'yds_match'] = 'Below'
+
+xls.loc[(xls.CmpP >= 55) & (xls.CmpP <=60), 'cmpp_match'] = 'Average'
+xls.loc[(xls.CmpP >60), 'cmpp_match'] = 'Above'
+xls.loc[(xls.CmpP < 55), 'cmpp_match'] = 'Below'
+
+
+xls.loc[(xls.tdratio >=2) & (xls.tdper16 >= 25),'td_match'] = 'Above TD'
+xls.loc[(xls.tdper16 >=25) & (xls.tdratio>1.25) & (xls.tdratio <2), 'td_match'] = 'Average TD'
+xls.loc[(xls.tdper16 <25) & (xls.tdper16 >16) & (xls.tdratio> 1.25) & (xls.tdratio <=1.5),'td_match'] = 'Average TD'
+xls.loc[(xls.tdper16 <29) & (xls.tdper16 >=16) & (xls.tdratio <= 1.25),'td_match'] = 'Below TD'
+xls.loc[(xls.tdratio <= 1.25) & (xls.tdper16 <=16),'td_match'] = 'Below TD'
+xls.loc[(xls.tdper16 >=17) & (xls.tdratio> 1) & (xls.tdratio <2),'td_match'] = 'Average TD'
+
+xls.loc[(xls.yds_match == 'Average') & (xls.td_match == 'Average TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Average'
+xls.loc[(xls.yds_match == 'Above') & (xls.td_match == 'Below TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Average'
+xls.loc[(xls.yds_match == 'Below') & (xls.td_match == 'Above TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Average'
+xls.loc[(xls.yds_match == 'Average') & (xls.td_match == 'Below TD') & (xls.cmpp_match == 'Above'),'skill'] = 'Average'
+xls.loc[(xls.yds_match == 'Average') & (xls.td_match == 'Above TD') & (xls.cmpp_match == 'Below'),'skill'] = 'Average'
+xls.loc[(xls.yds_match == 'Below') & (xls.td_match == 'Average TD') & (xls.cmpp_match == 'Above'),'skill'] = 'Average'
+xls.loc[(xls.yds_match == 'Above') & (xls.td_match == 'Average TD') & (xls.cmpp_match == 'Below'),'skill'] = 'Average'
+xls.loc[(xls.yds_match == 'Below') & (xls.td_match == 'Above TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Average'
+xls.loc[(xls.yds_match == 'Above') & (xls.td_match == 'Below TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Average'
+
+xls.loc[(xls.yds_match == 'Above') & (xls.td_match == 'Above TD') & (xls.cmpp_match == 'Above'),'skill'] = 'Star'
+xls.loc[(xls.yds_match == 'Above') & (xls.td_match == 'Above TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Star'
+xls.loc[(xls.yds_match == 'Above') & (xls.td_match == 'Average TD') & (xls.cmpp_match == 'Above'),'skill'] = 'Star'
+xls.loc[(xls.yds_match == 'Average') & (xls.td_match == 'Above TD') & (xls.cmpp_match == 'Above'),'skill'] = 'Star'
+xls.loc[(xls.yds_match == 'Above') & (xls.td_match == 'Above TD') & (xls.cmpp_match == 'Below'),'skill'] = 'Above Average'
+xls.loc[(xls.yds_match == 'Below') & (xls.td_match == 'Above TD') & (xls.cmpp_match == 'Above'),'skill'] = 'Above Average'
+xls.loc[(xls.yds_match == 'Above') & (xls.td_match == 'Below TD') & (xls.cmpp_match == 'Above'),'skill'] = 'Above Average'
+xls.loc[(xls.yds_match == 'Above') & (xls.td_match == 'Average TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Above Average'
+xls.loc[(xls.yds_match == 'Average') & (xls.td_match == 'Average TD') & (xls.cmpp_match == 'Above'),'skill'] = 'Above Average'
+xls.loc[(xls.yds_match == 'Average') & (xls.td_match == 'Above TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Above Average'
+xls.loc[(xls.yds_match == 'Average') & (xls.td_match == 'Average TD') & (xls.cmpp_match == 'Below'),'skill'] = 'Below Average'
+xls.loc[(xls.yds_match == 'Average') & (xls.td_match == 'Below TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Below Average'
+xls.loc[(xls.yds_match == 'Below') & (xls.td_match == 'Average TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Below Average'
+xls.loc[(xls.yds_match == 'Below') & (xls.td_match == 'Above TD') & (xls.cmpp_match == 'Below'),'skill'] = 'Below Average'
+xls.loc[(xls.yds_match == 'Above') & (xls.td_match == 'Below TD') & (xls.cmpp_match == 'Below'),'skill'] = 'Below Average'
+xls.loc[(xls.yds_match == 'Below') & (xls.td_match == 'Below TD') & (xls.cmpp_match == 'Above'),'skill'] = 'Below Average'
+xls.loc[(xls.yds_match == 'Below') & (xls.td_match == 'Below TD') & (xls.cmpp_match == 'Below'),'skill'] = 'Bad'
+xls.loc[(xls.yds_match == 'Below') & (xls.td_match == 'Below TD') & (xls.cmpp_match == 'Average'),'skill'] = 'Bad'
+xls.loc[(xls.yds_match == 'Average') & (xls.td_match == 'Below TD') & (xls.cmpp_match == 'Below'),'skill'] = 'Bad'
+xls.loc[(xls.yds_match == 'Below') & (xls.td_match == 'Average TD') & (xls.cmpp_match == 'Below'),'skill'] = 'Bad'
+
+
+xls.loc[xls.skill == 'Average', 'skillint'] = 1
+xls.loc[xls.skill == 'Star', 'skillint'] = 3
+xls.loc[xls.skill == 'Bad', 'skillint'] = -3
+xls.loc[xls.skill == 'Above Average', 'skillint'] = 2
+xls.loc[xls.skill == 'Below Average', 'skillint'] = -2
+
+
+tabletds = pd.pivot_table(xls,values=['tdratio'], index = ['Player','Year'], aggfunc=ny.sum)
+tableskill = pd.pivot_table(xls,values=['skill','td_match','yds_match','cmpp_match'],index=['Player','Year'],aggfunc=lambda x: ' '.join(str(v) for v in x))
+tableskillin = pd.pivot_table(xls, values=['skillint','ydsper16','tdper16','intper16',],index=['Player'], aggfunc={'skillint':ny.sum, 'ydsper16':ny.mean,'tdper16':ny.mean,'intper16':ny.mean})
+tableyrdsper16 = pd.pivot_table(xls, values = ['ydsper16'], index = ['Player'], aggfunc = [min,max])
+tableaj =  pd.pivot_table(xls, values = ['ydsper16','tdper16','intper16'], index=['Player'], aggfunc=[min,max])
+
+tableskillin.loc[(tableskillin.skillint >=13), 'qblevel'] = 'Superstar'
+#tableskillin.loc[(tableskillin.skillint >=7) & (tableskillin.skillint <10), 'qblevel'] = 'Star'
+tableskillin.loc[(tableskillin.skillint >=5)&(tableskillin.skillint <=12), 'qblevel'] = 'Above Avg'
+tableskillin.loc[(tableskillin.skillint >= 0)&(tableskillin.skillint <=4), 'qblevel'] = 'Avg'
+tableskillin.loc[(tableskillin.skillint <=0) & (tableskillin.skillint >=-2), 'qblevel'] = 'Below Avg'
+tableskillin.loc[(tableskillin.skillint <=-3), 'qblevel'] = 'Bad'
+starplay = pd.pivot_table(tableskillin, values=('ydsper16','tdper16','intper16'), index = ['qblevel'], aggfunc=ny.mean)
+
+
+cfbnfl = pd.read_excel(file,sheet_name='Sheet29', columns = ['TD','Cmp','AY/A','Y/A','Rush Att','Rush Yds','Rush Avg','Rush TD','NFLSuccess'], index=['Player'])
+cfbnfl = cfbnfl[['NFLSuccess','Rate','Cmp','AY/A','Y/A','Rush Att','Rush Yds','Rush Avg','Rush TD']]
+cfb = pd.read_excel(file,sheet_name ='Sheet33', columns = ['TD','Cmp','Y/A','AY/A','Rush Att','Rush Yds','Rush Avg', 'Rush TD'], index = ['Player'])
+cfb = cfb[['Rate','Cmp','Y/A','AY/A','Rush Att','Rush Yds','Rush Avg','Rush TD']]
+X = cfbnfl.values[0:121, 1:9]
+Y = cfbnfl.values[0:121,0]
+XY_test = cfb.values[0:109,0:8]
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.3, random_state=1)
+clf = DecisionTreeClassifier(criterion = "gini")
+clf = clf.fit(X_train,Y_train)
+
+Y_pred = clf.predict(X_test)
+XY_pred = clf.predict(XY_test)
+cfb['NFLSuccess'] = XY_pred
+
+
+
+
+#print(tableyrdsper16)
+#print(tableskill)
+print(tableskillin.loc[(tableskillin.qblevel == 'Superstar')])
+#print(tableskillin.loc[(tableskillin.qblevel == 'Superstar')].count())
+print(tableskillin.loc[(tableskillin.qblevel == 'Star')])
+#print(tableskillin.loc[(tableskillin.qblevel == 'Star')].count())
+print(tableskillin.loc[(tableskillin.qblevel == 'Above Avg')])
+#print(tableskillin.loc[(tableskillin.qblevel == 'Above Avg')].count())
+print(tableskillin.loc[(tableskillin.qblevel == 'Avg')])
+#print(tableskillin.loc[(tableskillin.qblevel == 'Avg')].count())
+print(tableskillin.loc[(tableskillin.qblevel == 'Below Avg')])
+#print(tableskillin.loc[(tableskillin.qblevel == 'Below Avg')].count())
+print(tableskillin.loc[(tableskillin.qblevel == 'Bad')])
+#print(tableskillin.loc[(tableskillin.qblevel == 'Bad')].count())
+#print(tablerecord)
+print(starplay)
+#print(xls.tdratio)
+#print(tableskillin.qblevel.count())
+print(XY_test)
+print(X)
+print(Y)
+print("Accuracy:",metrics.accuracy_score(Y_test, Y_pred))
+print(cfb)
+myFile = open('csvsuccess8.csv', 'w')
+with myFile:
+    writer = csv.writer(myFile)
+    writer.writerows(cfb.NFLSuccess)
+print("Confusion Matrix: ", confusion_matrix(Y_test, Y_pred))
+print("Report : ", classification_report(Y_test, Y_pred))
+print(clf.tree_.node_count)
+
+
+
